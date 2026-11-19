@@ -184,21 +184,51 @@ function paste(){
   if(sel&&sel!==doc.body)sel.after(el);else doc.body.appendChild(el);
   commit();select(el);
 }
+const PFX=['v-','view-','page-','pg-','p-','tab-','section-','sec-','s-'];
+function pageTarget(k){
+  let t=doc.getElementById(k);if(t)return t;
+  for(const p of PFX){t=doc.getElementById(p+k);if(t)return t}
+  return null;
+}
 function findPages(){
   const out=[],seen={};
-  doc.querySelectorAll('[href^="#"],[data-page],[data-tab],[data-target],[onclick]').forEach(n=>{
-    let k=n.getAttribute('data-page')||n.getAttribute('data-tab')||n.getAttribute('data-target')||'';
+  doc.querySelectorAll('[href^="#"],[data-page],[data-tab],[data-target],[data-v],[data-view],[onclick]').forEach(n=>{
+    let k=n.getAttribute('data-page')||n.getAttribute('data-tab')||n.getAttribute('data-target')||n.getAttribute('data-v')||n.getAttribute('data-view')||'';
     const h=n.getAttribute('href');
     if(!k&&h&&h.length>1)k=h;
     if(!k){const m=(n.getAttribute('onclick')||'').match(/['"]#?([\w-]+)['"]/);if(m)k=m[1]}
     k=k.replace(/^#/,'');
     if(!k||seen[k])return;
-    const t=doc.getElementById(k);
+    const t=pageTarget(k);
     if(!t||t===doc.body||t.contains(n))return;
     seen[k]=1;
     out.push({key:k,nav:n,unit:n.closest('li')||n,target:t,name:(n.textContent||k).trim().replace(/\s+/g,' ')||k});
   });
   return out;
+}
+/* Many sites switch pages with a script that holds a list of page names, e.g. var NAMES=["home","projects"].
+   Keep that list in step when a page is added or removed, or the new page would never show up. */
+function syncPageLists(oldKey,newKey){
+  doc.querySelectorAll('script:not([src])').forEach(sc=>{
+    const src=sc.textContent;
+    const out=src.replace(/\[[^\[\]{}()]*\]/g,m=>{
+      const items=[...m.matchAll(/(["'])([\w-]+)\1/g)];
+      if(items.length<2)return m;
+      if(m.replace(/(["'])[\w-]+\1/g,'').replace(/[\s,\[\]]/g,''))return m;
+      const hit=items.find(i=>i[2]===oldKey);if(!hit)return m;
+      if(newKey){
+        if(items.some(i=>i[2]===newKey))return m;
+        const q=hit[1],end=hit.index+hit[0].length;
+        return m.slice(0,end)+','+q+newKey+q+m.slice(end);
+      }
+      let st=hit.index,en=st+hit[0].length;
+      const after=m.slice(en).match(/^\s*,\s*/);
+      if(after)en+=after[0].length;
+      else{const before=m.slice(0,st).match(/,\s*$/);if(before)st-=before[0].length}
+      return m.slice(0,st)+m.slice(en);
+    });
+    if(out!==src)sc.textContent=out;
+  });
 }
 function pagesUI(){
   const ps=findPages();
@@ -212,9 +242,10 @@ function addPage(name){
   const ps=findPages();if(!ps.length)return;
   const tpl=(sel&&ps.find(p=>p.unit.contains(sel)))||ps[0];
   let key=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'page';
-  if(doc.getElementById(key))key+='-'+(Date.now()%1000);
+  const pfx=tpl.target.id.endsWith(tpl.key)?tpl.target.id.slice(0,tpl.target.id.length-tpl.key.length):'';
+  if(doc.getElementById(pfx+key)||doc.getElementById(key))key+='-'+(Date.now()%1000);
   pushUndo();
-  const fix=n=>{[...n.attributes].forEach(a=>{if(a.name!=='class'&&a.name!=='style')n.setAttribute(a.name,a.value.split(tpl.key).join(key))});n.classList.remove('active','current','selected');n.removeAttribute('data-ed-sel')};
+  const fix=n=>{[...n.attributes].forEach(a=>{if(a.name!=='class'&&a.name!=='style')n.setAttribute(a.name,a.value.split(tpl.key).join(key))});n.classList.remove('active','current','selected','on','is-active','is-current');n.removeAttribute('aria-current');n.removeAttribute('data-ed-sel')};
   const u=tpl.unit.cloneNode(true);
   [u,...u.querySelectorAll('*')].forEach(fix);
   const w=doc.createTreeWalker(u,4),ts=[];let tn;
@@ -222,15 +253,17 @@ function addPage(name){
   ts.forEach((t,i)=>{t.nodeValue=i?'':name});
   tpl.unit.after(u);
   const pg=tpl.target.cloneNode(false);
-  fix(pg);pg.id=key;
+  fix(pg);pg.id=pfx+key;
+  if(pg.hasAttribute('aria-label'))pg.setAttribute('aria-label',name);
   pg.innerHTML='<h1>'+esc(name)+'</h1><p>New page. Click here to edit.</p>';
   tpl.target.after(pg);
+  syncPageLists(tpl.key,key);
   commit();panel();
   toast('Added “'+name+'”. Press Play, open it, then Edit this page.');
 }
 function rmPage(i){
   const p=findPages()[i];if(!p)return;
-  pushUndo();p.unit.remove();p.target.remove();sel=null;commit();panel();
+  pushUndo();p.unit.remove();p.target.remove();syncPageLists(p.key,null);sel=null;commit();panel();
   toast('Removed “'+p.name+'”');
 }
 const SYS=['Arial','Georgia','Verdana','Courier New','Comic Sans MS','Impact'];
