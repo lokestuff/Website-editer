@@ -39,8 +39,11 @@ aside h2{margin:6px 0 0;font-size:15px;font-weight:800;word-break:break-all}
 label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);flex:1}
 input,textarea,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 9px;width:100%;box-sizing:border-box}
 .row{display:flex;gap:8px}.row.end{align-items:flex-end}
-#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:10px;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast{z-index:100;position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:10px;opacity:0;pointer-events:none;transition:opacity .2s}
 #toast.on{opacity:1}
+#codeDlg{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55);display:grid;place-items:center;padding:12px}
+#codeDlg .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px;width:min(900px,100%);height:min(85vh,100%);box-sizing:border-box}
+#codeDlg textarea{flex:1;min-height:0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;white-space:pre;resize:none}
 [hidden]{display:none!important}
 @media (max-width:760px){main{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto}aside{border-left:0;border-top:1px solid var(--line);max-height:42vh}}
 @media (prefers-reduced-motion:reduce){#toast{transition:none}}
@@ -54,6 +57,7 @@ input,textarea,select{font:inherit;color:var(--ink);background:var(--bg);border:
   <button class="btn" id="sample">Try a sample</button>
   <span class="grow"></span>
   <button class="btn" id="undoB">Undo</button>
+  <button class="btn" id="codeB" hidden>Code</button>
   <span class="seg"><button id="m-edit" aria-pressed="true">Edit</button><button id="m-play" aria-pressed="false">Play</button></span>
   <button class="btn" id="snap" hidden>Edit this page</button>
   <button class="btn" id="loadB" hidden>Load saved</button>
@@ -70,11 +74,12 @@ input,textarea,select{font:inherit;color:var(--ink);background:var(--bg);border:
     </div>
     <button class="btn pri" id="fsExit">Exit full screen</button>
     <iframe id="frame" title="Page preview" hidden></iframe>
-    <p class="tip" id="tip" hidden>Click to select, drag to move. Arrow keys nudge (Shift = 10 px). To edit another page, press Play, go to it, then press Edit this page. Images or scripts loaded from other sites may not show here, but your download keeps them.</p>
+    <p class="tip" id="tip" hidden>Click to select, drag to move. Drag the pink ↻ circle to spin it (Shift snaps to 15°). Arrow keys nudge (Shift = 10 px). Ctrl/Cmd+Z undoes. To edit another page, press Play, go to it, then press Edit this page. Images or scripts loaded from other sites may not show here, but your download keeps them.</p>
   </section>
   <aside id="inspector"></aside>
 </main>
 </div>
+<div id="codeDlg" hidden><div class="box"><div class="row"><button class="btn pri" id="codeCopy">Copy all code</button><span class="grow"></span><button class="btn" id="codeClose">Close</button></div><textarea id="codeTa" readonly spellcheck="false"></textarea></div></div>
 <input type="file" id="fileIn" accept=".html,.htm,text/html" hidden>
 <input type="file" id="imgIn" accept="image/*" hidden>
 <input type="file" id="fontIn" accept=".ttf,.otf,.woff,.woff2" hidden>
@@ -82,7 +87,7 @@ input,textarea,select{font:inherit;color:var(--ink);background:var(--bg);border:
 <script>
 const $=s=>document.querySelector(s);
 const frame=$('#frame');
-let html='',doc=null,sel=null,undo=[],mode='edit',drag=null,fileName='page.html',lastKey=0;
+let html='',doc=null,sel=null,undo=[],mode='edit',drag=null,rotD=null,fileName='page.html',lastKey=0;
 const SAMPLE='<!DOCTYPE html><html><head><title>Sample page</title><style>body{font-family:sans-serif;background:#cfe8ff;text-align:center;padding:40px}.guy{font-size:90px;display:inline-block}h1{color:#223}button{font-size:18px;padding:10px 18px}</style></head><body><h1>My cool page</h1><img class="logo" width="70" alt="logo" src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 10 10\'%3E%3Crect width=\'10\' height=\'10\' rx=\'3\' fill=\'%235b4bff\'/%3E%3C/svg%3E"><br><div class="guy">🙂</div><p>Click me and change my words.</p><button>Play</button></body></html>';
 
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('on'),2000)}
@@ -93,10 +98,11 @@ function pick(cb){const i=$('#imgIn');i.value='';i.onchange=()=>{const f=i.files
 function clean(){
   const c=doc.documentElement.cloneNode(true);
   c.querySelector('#__ed')?.remove();
+  c.querySelector('#__edh')?.remove();
   c.querySelectorAll('[data-ed-sel]').forEach(n=>n.removeAttribute('data-ed-sel'));
   return '<!DOCTYPE html>\n'+c.outerHTML;
 }
-const commit=()=>{html=clean()};
+const commit=()=>{html=clean();updHandle()};
 function pushUndo(){undo.push(clean());if(undo.length>50)undo.shift()}
 const getT=el=>{const m=(el.style.translate||'').match(/(-?[\d.]+)px\s+(-?[\d.]+)px/);return m?[+m[1],+m[2]]:[0,0]};
 const setT=(el,x,y)=>{el.style.translate=x+'px '+y+'px'};
@@ -104,7 +110,7 @@ const setT=(el,x,y)=>{el.style.translate=x+'px '+y+'px'};
 function loadHTML(text,name){html=text;if(name)fileName=name;undo=[];mode='edit';syncMode();render()}
 function render(){
   sel=null;doc=null;
-  $('#empty').hidden=!!html;frame.hidden=!html;$('#tip').hidden=!html;$('#fs').hidden=!html;$('#saveB').hidden=!html;if(!html)setFS(false);
+  $('#empty').hidden=!!html;frame.hidden=!html;$('#tip').hidden=!html;$('#fs').hidden=!html;$('#saveB').hidden=!html;$('#codeB').hidden=!html;if(!html)setFS(false);
   if(!html){panel();return}
   frame.onload=()=>{if(mode==='edit')arm();panel()};
   frame.setAttribute('sandbox',mode==='edit'?'allow-same-origin':'allow-scripts');
@@ -139,8 +145,10 @@ function shim(h){
 function arm(){
   doc=frame.contentDocument;if(!doc||!doc.documentElement)return;
   const st=doc.createElement('style');st.id='__ed';
-  st.textContent='iframe{pointer-events:none}*{cursor:move!important}*:hover{outline:1px dashed #5b4bff}[data-ed-sel]{outline:2px solid #ff3d8b!important;outline-offset:2px;touch-action:none}';
+  st.textContent='iframe{pointer-events:none}*{cursor:move!important}*:hover{outline:1px dashed #5b4bff}[data-ed-sel]{outline:2px solid #ff3d8b!important;outline-offset:2px;touch-action:none}#__edh{position:absolute;display:none;width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:50%;background:#ff3d8b;color:#fff;font:700 17px/28px sans-serif;text-align:center;z-index:2147483647;box-shadow:0 1px 6px rgba(0,0,0,.45);cursor:grab!important;touch-action:none;user-select:none;-webkit-user-select:none}';
   doc.head.appendChild(st);
+  const hd=doc.createElement('div');hd.id='__edh';hd.textContent='↻';hd.title='Drag to spin (hold Shift to snap)';doc.documentElement.appendChild(hd);
+  doc.defaultView.addEventListener('resize',updHandle);
   doc.addEventListener('pointerdown',down,true);
   doc.addEventListener('pointermove',move,true);
   doc.addEventListener('pointerup',up,true);
@@ -152,10 +160,27 @@ function arm(){
 function select(el){
   if(sel)sel.removeAttribute('data-ed-sel');
   sel=el;if(el)el.setAttribute('data-ed-sel','');
-  panel();
+  panel();updHandle();
+}
+function updHandle(){
+  const h=doc&&doc.getElementById('__edh');if(!h)return;
+  if(!sel||mode!=='edit'||sel===doc.body||sel===doc.documentElement){h.style.display='none';return}
+  const r=sel.getBoundingClientRect(),w=doc.defaultView;
+  const cx=r.left+r.width/2+w.scrollX,cy=r.top+r.height/2+w.scrollY;
+  const a=rot(sel)*Math.PI/180,d=(sel.offsetHeight||r.height)/2+30;
+  h.style.display='block';
+  h.style.left=Math.max(16,cx+Math.sin(a)*d)+'px';
+  h.style.top=Math.max(16,cy-Math.cos(a)*d)+'px';
 }
 function down(e){
   const t=e.target;
+  if(t.id==='__edh'&&sel){
+    e.preventDefault();
+    const r=sel.getBoundingClientRect();
+    rotD={cx:r.left+r.width/2,cy:r.top+r.height/2,moved:false};
+    try{t.setPointerCapture(e.pointerId)}catch(_){}
+    return;
+  }
   if(t===doc.documentElement||t===doc.body){select(null);return}
   e.preventDefault();
   select(t);
@@ -164,14 +189,24 @@ function down(e){
   try{t.setPointerCapture(e.pointerId)}catch(_){}
 }
 function move(e){
+  if(rotD&&sel){
+    if(!rotD.moved){rotD.moved=true;pushUndo()}
+    let a=Math.atan2(e.clientX-rotD.cx,-(e.clientY-rotD.cy))*180/Math.PI;
+    a=e.shiftKey?Math.round(a/15)*15:Math.round(a);
+    if(a>180)a-=360;
+    sel.style.rotate=a?a+'deg':'';
+    if($('#f-r'))$('#f-r').value=a;
+    updHandle();
+    return;
+  }
   if(!drag||!sel)return;
   const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
   if(!drag.moved){if(Math.abs(dx)+Math.abs(dy)<4)return;drag.moved=true;pushUndo()}
   const x=Math.round(drag.ox+dx),y=Math.round(drag.oy+dy);
-  setT(sel,x,y);
+  setT(sel,x,y);updHandle();
   if($('#f-x')){$('#f-x').value=x;$('#f-y').value=y}
 }
-function up(){if(drag&&drag.moved)commit();drag=null}
+function up(){if(rotD){if(rotD.moved)commit();rotD=null;return}if(drag&&drag.moved)commit();drag=null}
 const rot=el=>parseFloat(el.style.rotate)||0;
 let clip='';
 function copy(){if(!sel)return;const c=sel.cloneNode(true);c.removeAttribute('data-ed-sel');clip=c.outerHTML;toast('Copied')}
@@ -276,6 +311,7 @@ function fontNames(){
 function fontOpts(){return '<option value="">Choose a font…</option>'+fontNames().concat(SYS).map(n=>'<option>'+esc(n)+'</option>').join('')}
 function key(e){
   if(mode==='edit'&&doc&&(e.ctrlKey||e.metaKey)&&!/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)){
+    if((e.key==='z'||e.key==='Z')&&!e.shiftKey){e.preventDefault();doUndo();return}
     if(e.key==='c'&&sel){e.preventDefault();copy();return}
     if(e.key==='v'){e.preventDefault();paste();return}
   }
@@ -465,8 +501,23 @@ function setFS(on){
 $('#fs').onclick=()=>setFS(!$('.stage').classList.contains('fs'));
 $('#fsExit').onclick=()=>setFS(false);
 document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement)setFS(false)});
-window.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('.stage').classList.contains('fs'))setFS(false)});
-$('#undoB').onclick=()=>{if(mode!=='edit'||!undo.length){toast('Nothing to undo');return}html=undo.pop();render()};
+window.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&!$('#codeDlg').hidden){$('#codeDlg').hidden=true;return}
+  if(e.key==='Escape'&&$('.stage').classList.contains('fs'))setFS(false)
+});
+$('#codeB').onclick=()=>{
+  if(!html)return;
+  const t=$('#codeTa');t.value=html;$('#codeDlg').hidden=false;t.focus();t.select();
+};
+$('#codeClose').onclick=()=>{$('#codeDlg').hidden=true};
+$('#codeDlg').addEventListener('pointerdown',e=>{if(e.target===$('#codeDlg'))$('#codeDlg').hidden=true});
+$('#codeCopy').onclick=async()=>{
+  const t=$('#codeTa');
+  try{await navigator.clipboard.writeText(t.value);toast('Copied all the code')}
+  catch(_){t.focus();t.select();try{document.execCommand('copy');toast('Copied all the code')}catch(__){toast('Press Ctrl/Cmd+C to copy')}}
+};
+function doUndo(){if(mode!=='edit'||!undo.length){toast('Nothing to undo');return}html=undo.pop();render()}
+$('#undoB').onclick=doUndo;
 $('#m-edit').onclick=()=>setMode('edit');
 $('#m-play').onclick=()=>setMode('play');
 $('#snap').onclick=()=>{if(mode==='play'&&frame.contentWindow)frame.contentWindow.postMessage('ed-snap','*')};
@@ -489,3 +540,4 @@ panel();
 </script>
 </body>
 </html>
+
