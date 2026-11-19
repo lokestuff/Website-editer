@@ -296,9 +296,19 @@ function addPage(name){
   commit();panel();
   toast('Added “'+name+'”. Press Play, open it, then Edit this page.');
 }
+/* A site's own script often still looks up a page after it's gone, gets null, and crashes everything.
+   This tiny script (placed first in <head>) hands back a harmless blank element for removed page ids. */
+const GUARD="(function(){var ids=JSON.parse(document.currentScript.getAttribute('data-ids')||'[]');if(!ids.length)return;var mk=function(){return document.createElement('div')};var g=document.getElementById;document.getElementById=function(i){return g.call(document,i)||(ids.indexOf(i)>-1?mk():null)};var q=document.querySelector;document.querySelector=function(s){var r=q.call(document,s);if(r)return r;for(var k=0;k<ids.length;k++)if(String(s).indexOf('#'+ids[k])>-1)return mk();return null}})();";
+function guardIds(ids){
+  let g=doc.getElementById('ed-removed');
+  if(!g){g=doc.createElement('script');g.id='ed-removed';g.textContent=GUARD;g.setAttribute('data-ids','[]');doc.head.insertBefore(g,doc.head.firstChild)}
+  const cur=JSON.parse(g.getAttribute('data-ids')||'[]');
+  ids.forEach(i=>{if(i&&cur.indexOf(i)<0)cur.push(i)});
+  g.setAttribute('data-ids',JSON.stringify(cur));
+}
 function rmPage(i){
   const p=findPages()[i];if(!p)return;
-  pushUndo();p.unit.remove();p.target.remove();syncPageLists(p.key,null);sel=null;commit();panel();
+  pushUndo();guardIds([p.key,p.target.id]);p.unit.remove();p.target.remove();syncPageLists(p.key,null);sel=null;commit();panel();
   toast('Removed “'+p.name+'”');
 }
 const SYS=['Arial','Georgia','Verdana','Courier New','Comic Sans MS','Impact'];
@@ -540,4 +550,5 @@ panel();
 </script>
 </body>
 </html>
+
 
