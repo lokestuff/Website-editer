@@ -56,6 +56,8 @@ input,textarea,select{font:inherit;color:var(--ink);background:var(--bg);border:
   <button class="btn" id="undoB">Undo</button>
   <span class="seg"><button id="m-edit" aria-pressed="true">Edit</button><button id="m-play" aria-pressed="false">Play</button></span>
   <button class="btn" id="snap" hidden>Edit this page</button>
+  <button class="btn" id="loadB" hidden>Load saved</button>
+  <button class="btn" id="saveB" hidden>Save</button>
   <button class="btn" id="fs" hidden>Full screen</button>
   <button class="btn pri" id="dl">Download</button>
 </header>
@@ -64,7 +66,7 @@ input,textarea,select{font:inherit;color:var(--ink);background:var(--bg);border:
     <div id="empty">
       <h2>Drop an HTML file here</h2>
       <p>Then click anything on the page to move it, retype it or swap its image.</p>
-      <div class="row"><button class="btn pri" id="open2">Open HTML…</button><button class="btn" id="sample2">Try a sample</button></div>
+      <div class="row"><button class="btn pri" id="open2">Open HTML…</button><button class="btn" id="sample2">Try a sample</button><button class="btn" id="load2" hidden>Load saved site</button></div>
     </div>
     <button class="btn pri" id="fsExit">Exit full screen</button>
     <iframe id="frame" title="Page preview" hidden></iframe>
@@ -102,7 +104,7 @@ const setT=(el,x,y)=>{el.style.translate=x+'px '+y+'px'};
 function loadHTML(text,name){html=text;if(name)fileName=name;undo=[];mode='edit';syncMode();render()}
 function render(){
   sel=null;doc=null;
-  $('#empty').hidden=!!html;frame.hidden=!html;$('#tip').hidden=!html;$('#fs').hidden=!html;if(!html)setFS(false);
+  $('#empty').hidden=!!html;frame.hidden=!html;$('#tip').hidden=!html;$('#fs').hidden=!html;$('#saveB').hidden=!html;if(!html)setFS(false);
   if(!html){panel();return}
   frame.onload=()=>{if(mode==='edit')arm();panel()};
   frame.setAttribute('sandbox',mode==='edit'?'allow-same-origin':'allow-scripts');
@@ -389,6 +391,35 @@ function dropH(e){
 $('#open').onclick=$('#open2').onclick=()=>{$('#fileIn').value='';$('#fileIn').click()};
 $('#fileIn').onchange=e=>openFile(e.target.files[0]);
 $('#sample').onclick=$('#sample2').onclick=()=>loadHTML(SAMPLE,'sample.html');
+const DB={
+  open(){return new Promise((res,rej)=>{
+    if(!window.indexedDB){rej(new Error('no idb'));return}
+    const r=indexedDB.open('page-tweaker',1);
+    r.onupgradeneeded=()=>r.result.createObjectStore('sites');
+    r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);
+  })},
+  async get(){const d=await this.open();return new Promise((res,rej)=>{const q=d.transaction('sites').objectStore('sites').get('saved');q.onsuccess=()=>res(q.result||null);q.onerror=()=>rej(q.error)})},
+  async put(v){const d=await this.open();return new Promise((res,rej)=>{const t=d.transaction('sites','readwrite');t.objectStore('sites').put(v,'saved');t.oncomplete=()=>res();t.onerror=()=>rej(t.error);t.onabort=()=>rej(t.error)})}
+};
+function showSaved(rec){
+  const on=!!rec;
+  [$('#loadB'),$('#load2')].forEach(b=>{b.hidden=!on;if(on)b.title='Saved '+new Date(rec.time).toLocaleString()+' ('+rec.name+')'});
+}
+async function refreshSaved(){try{showSaved(await DB.get())}catch(e){showSaved(null)}}
+$('#saveB').onclick=async()=>{
+  if(!html){toast('Open a page first');return}
+  try{await DB.put({html,name:fileName,time:Date.now()});toast('Saved in this browser');refreshSaved()}
+  catch(e){toast('Could not save here. Use Download instead.')}
+};
+$('#loadB').onclick=$('#load2').onclick=async()=>{
+  try{
+    const rec=await DB.get();
+    if(!rec){toast('Nothing saved yet');return}
+    if(html&&!confirm('Load your saved site? This replaces what you have open now.'))return;
+    loadHTML(rec.html,rec.name);toast('Loaded saved site');
+  }catch(e){toast('Could not load the saved site')}
+};
+refreshSaved();
 function setFS(on){
   const st=$('.stage');
   if(on===st.classList.contains('fs'))return;
