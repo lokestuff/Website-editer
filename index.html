@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Page Tweaker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eceaf7;--panel:#ffffff;--ink:#1f1b3a;--muted:#6b678a;--line:#d8d4ee;--accent:#5b4bff;--accent-ink:#ffffff;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17142b;--panel:#221e3d;--ink:#ece9ff;--muted:#a19dc4;--line:#363060;--accent:#8c80ff;--accent-ink:#14102e;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#17142b;--panel:#221e3d;--ink:#ece9ff;--muted:#a19dc4;--line:#363060;--accent:#8c80ff;--accent-ink:#14102e;color-scheme:dark}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:15px}
+.app{display:grid;grid-template-rows:auto minmax(0,1fr);height:100%}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+header h1{margin:0 8px 0 0;font-size:20px;font-weight:800;letter-spacing:-.01em}
+.grow{flex:1}
+.btn,.seg button{font:inherit;font-weight:600;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+.btn.pri,.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+.btn:focus-visible,.seg button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.seg{display:inline-flex}.seg button{border-radius:0}.seg button:first-child{border-radius:10px 0 0 10px}.seg button:last-child{border-radius:0 10px 10px 0}
+main{display:grid;grid-template-columns:minmax(0,1fr) 290px;min-height:0}
+.stage{position:relative;padding:12px;display:flex;flex-direction:column;gap:8px;min-height:0}
+iframe{flex:1;width:100%;min-height:0;border:1px solid var(--line);border-radius:12px;background:#fff}
+#fsExit{display:none}
+.stage.fs{position:fixed;inset:0;z-index:50;padding:0;gap:0;background:var(--bg)}
+.stage.fs iframe{border:0;border-radius:0}
+.stage.fs .tip{display:none}
+.stage.fs #fsExit{display:block;position:absolute;top:calc(10px + env(safe-area-inset-top,0px));right:12px;z-index:2;opacity:.85;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+#empty{flex:1;display:grid;place-content:center;gap:12px;text-align:center;border:2px dashed var(--line);border-radius:16px;padding:24px}
+#empty h2{margin:0;font-size:26px;font-weight:800}#empty p{margin:0;color:var(--muted)}
+#empty .row{justify-content:center}
+.tip{margin:0;font-size:13px;color:var(--muted)}
+aside{background:var(--panel);border-left:1px solid var(--line);padding:14px;overflow:auto;display:flex;flex-direction:column;gap:10px}
+aside h2{margin:6px 0 0;font-size:15px;font-weight:800;word-break:break-all}
+.hint{margin:0;color:var(--muted)}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);flex:1}
+input,textarea,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 9px;width:100%;box-sizing:border-box}
+.row{display:flex;gap:8px}.row.end{align-items:flex-end}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:10px;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.on{opacity:1}
+[hidden]{display:none!important}
+@media (max-width:760px){main{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) auto}aside{border-left:0;border-top:1px solid var(--line);max-height:42vh}}
+@media (prefers-reduced-motion:reduce){#toast{transition:none}}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <h1>Page Tweaker</h1>
+  <button class="btn pri" id="open">Open HTML…</button>
+  <button class="btn" id="sample">Try a sample</button>
+  <span class="grow"></span>
+  <button class="btn" id="undoB">Undo</button>
+  <span class="seg"><button id="m-edit" aria-pressed="true">Edit</button><button id="m-play" aria-pressed="false">Play</button></span>
+  <button class="btn" id="snap" hidden>Edit this page</button>
+  <button class="btn" id="fs" hidden>Full screen</button>
+  <button class="btn pri" id="dl">Download</button>
+</header>
+<main>
+  <section class="stage">
+    <div id="empty">
+      <h2>Drop an HTML file here</h2>
+      <p>Then click anything on the page to move it, retype it or swap its image.</p>
+      <div class="row"><button class="btn pri" id="open2">Open HTML…</button><button class="btn" id="sample2">Try a sample</button></div>
+    </div>
+    <button class="btn pri" id="fsExit">Exit full screen</button>
+    <iframe id="frame" title="Page preview" hidden></iframe>
+    <p class="tip" id="tip" hidden>Click to select, drag to move. Arrow keys nudge (Shift = 10 px). To edit another page, press Play, go to it, then press Edit this page. Images or scripts loaded from other sites may not show here, but your download keeps them.</p>
+  </section>
+  <aside id="inspector"></aside>
+</main>
+</div>
+<input type="file" id="fileIn" accept=".html,.htm,text/html" hidden>
+<input type="file" id="imgIn" accept="image/*" hidden>
+<input type="file" id="fontIn" accept=".ttf,.otf,.woff,.woff2" hidden>
+<div id="toast" role="status"></div>
+<script>
+const $=s=>document.querySelector(s);
+const frame=$('#frame');
+let html='',doc=null,sel=null,undo=[],mode='edit',drag=null,fileName='page.html',lastKey=0;
+const SAMPLE='<!DOCTYPE html><html><head><title>Sample page</title><style>body{font-family:sans-serif;background:#cfe8ff;text-align:center;padding:40px}.guy{font-size:90px;display:inline-block}h1{color:#223}button{font-size:18px;padding:10px 18px}</style></head><body><h1>My cool page</h1><img class="logo" width="70" alt="logo" src="data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 10 10\'%3E%3Crect width=\'10\' height=\'10\' rx=\'3\' fill=\'%235b4bff\'/%3E%3C/svg%3E"><br><div class="guy">🙂</div><p>Click me and change my words.</p><button>Play</button></body></html>';
+
+function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove('on'),2000)}
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const readURL=f=>new Promise(r=>{const x=new FileReader();x.onload=()=>r(x.result);x.readAsDataURL(f)});
+function pick(cb){const i=$('#imgIn');i.value='';i.onchange=()=>{const f=i.files[0];if(f)readURL(f).then(cb)};i.click()}
+
+function clean(){
+  const c=doc.documentElement.cloneNode(true);
+  c.querySelector('#__ed')?.remove();
+  c.querySelectorAll('[data-ed-sel]').forEach(n=>n.removeAttribute('data-ed-sel'));
+  return '<!DOCTYPE html>\n'+c.outerHTML;
+}
+const commit=()=>{html=clean()};
+function pushUndo(){undo.push(clean());if(undo.length>50)undo.shift()}
+const getT=el=>{const m=(el.style.translate||'').match(/(-?[\d.]+)px\s+(-?[\d.]+)px/);return m?[+m[1],+m[2]]:[0,0]};
+const setT=(el,x,y)=>{el.style.translate=x+'px '+y+'px'};
+
+function loadHTML(text,name){html=text;if(name)fileName=name;undo=[];mode='edit';syncMode();render()}
+function render(){
+  sel=null;doc=null;
+  $('#empty').hidden=!!html;frame.hidden=!html;$('#tip').hidden=!html;$('#fs').hidden=!html;if(!html)setFS(false);
+  if(!html){panel();return}
+  frame.onload=()=>{if(mode==='edit')arm();panel()};
+  frame.setAttribute('sandbox',mode==='edit'?'allow-same-origin':'allow-scripts');
+  frame.srcdoc='';frame.srcdoc=mode==='play'?shim(html):html;
+  panel();
+}
+const SHIM='<script data-ed-shim>('+(function(){
+  var mk=function(){var d={};return{getItem:function(k){return k in d?d[k]:null},setItem:function(k,v){d[k]=String(v)},removeItem:function(k){delete d[k]},clear:function(){d={}},key:function(i){return Object.keys(d)[i]||null},get length(){return Object.keys(d).length}}};
+  try{window.localStorage.getItem('x')}catch(e){try{Object.defineProperty(window,'localStorage',{value:mk(),configurable:true})}catch(_){}}
+  try{window.sessionStorage.getItem('x')}catch(e){try{Object.defineProperty(window,'sessionStorage',{value:mk(),configurable:true})}catch(_){}}
+  document.addEventListener('click',function(e){
+    var a=e.target.closest&&e.target.closest('a[href^="#"]');if(!a)return;
+    e.preventDefault();
+    var id=decodeURIComponent(a.getAttribute('href').slice(1));
+    if(id&&location.hash!=='#'+id)location.hash=id;
+    var t=id&&document.getElementById(id);
+    if(t)t.scrollIntoView();else if(!id)scrollTo(0,0);
+  });
+  window.addEventListener('message',function(e){
+    if(e.data!=='ed-snap')return;
+    var c=document.documentElement.cloneNode(true);
+    var s=c.querySelectorAll('script[data-ed-shim]');
+    for(var i=0;i<s.length;i++)s[i].remove();
+    parent.postMessage({edSnap:'<!DOCTYPE html>\n'+c.outerHTML},'*');
+  });
+}).toString()+')()<\/script>';
+function shim(h){
+  if(/<head[^>]*>/i.test(h))return h.replace(/<head[^>]*>/i,m=>m+SHIM);
+  if(/<html[^>]*>/i.test(h))return h.replace(/<html[^>]*>/i,m=>m+SHIM);
+  return SHIM+h;
+}
+function arm(){
+  doc=frame.contentDocument;if(!doc||!doc.documentElement)return;
+  const st=doc.createElement('style');st.id='__ed';
+  st.textContent='iframe{pointer-events:none}*{cursor:move!important}*:hover{outline:1px dashed #5b4bff}[data-ed-sel]{outline:2px solid #ff3d8b!important;outline-offset:2px;touch-action:none}';
+  doc.head.appendChild(st);
+  doc.addEventListener('pointerdown',down,true);
+  doc.addEventListener('pointermove',move,true);
+  doc.addEventListener('pointerup',up,true);
+  doc.addEventListener('click',e=>e.preventDefault(),true);
+  doc.addEventListener('keydown',key,true);
+  doc.addEventListener('dragover',e=>e.preventDefault());
+  doc.addEventListener('drop',dropH);
+}
+function select(el){
+  if(sel)sel.removeAttribute('data-ed-sel');
+  sel=el;if(el)el.setAttribute('data-ed-sel','');
+  panel();
+}
+function down(e){
+  const t=e.target;
+  if(t===doc.documentElement||t===doc.body){select(null);return}
+  e.preventDefault();
+  select(t);
+  const [ox,oy]=getT(t);
+  drag={x:e.clientX,y:e.clientY,ox,oy,moved:false};
+  try{t.setPointerCapture(e.pointerId)}catch(_){}
+}
+function move(e){
+  if(!drag||!sel)return;
+  const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+  if(!drag.moved){if(Math.abs(dx)+Math.abs(dy)<4)return;drag.moved=true;pushUndo()}
+  const x=Math.round(drag.ox+dx),y=Math.round(drag.oy+dy);
+  setT(sel,x,y);
+  if($('#f-x')){$('#f-x').value=x;$('#f-y').value=y}
+}
+function up(){if(drag&&drag.moved)commit();drag=null}
+const rot=el=>parseFloat(el.style.rotate)||0;
+let clip='';
+function copy(){if(!sel)return;const c=sel.cloneNode(true);c.removeAttribute('data-ed-sel');clip=c.outerHTML;toast('Copied')}
+function paste(){
+  if(!clip||!doc){toast('Copy something first');return}
+  pushUndo();
+  const t=doc.createElement('template');t.innerHTML=clip;
+  const el=t.content.firstElementChild;if(!el)return;
+  const [x,y]=getT(el);setT(el,x+20,y+20);
+  if(sel&&sel!==doc.body)sel.after(el);else doc.body.appendChild(el);
+  commit();select(el);
+}
+function findPages(){
+  const out=[],seen={};
+  doc.querySelectorAll('[href^="#"],[data-page],[data-tab],[data-target],[onclick]').forEach(n=>{
+    let k=n.getAttribute('data-page')||n.getAttribute('data-tab')||n.getAttribute('data-target')||'';
+    const h=n.getAttribute('href');
+    if(!k&&h&&h.length>1)k=h;
+    if(!k){const m=(n.getAttribute('onclick')||'').match(/['"]#?([\w-]+)['"]/);if(m)k=m[1]}
+    k=k.replace(/^#/,'');
+    if(!k||seen[k])return;
+    const t=doc.getElementById(k);
+    if(!t||t===doc.body||t.contains(n))return;
+    seen[k]=1;
+    out.push({key:k,nav:n,unit:n.closest('li')||n,target:t,name:(n.textContent||k).trim().replace(/\s+/g,' ')||k});
+  });
+  return out;
+}
+function pagesUI(){
+  const ps=findPages();
+  if(!ps.length)return '<p class="hint">Couldn’t find your pages automatically. Send me your HTML file and I’ll wire this up for your site.</p>';
+  return ps.map((p,i)=>'<div class="row end"><span class="hint" style="flex:1">'+esc(p.name)+'</span><button class="btn" data-rm="'+i+'">Remove</button></div>').join('')+'<div class="row end"><label>New page name<input id="f-np" type="text" placeholder="e.g. Blog"></label><button class="btn" id="b-np">Add</button></div>';
+}
+function pageOpts(){return '<option value="">Choose a page…</option>'+findPages().map((p,i)=>'<option value="'+i+'">'+esc(p.name)+'</option>').join('')}
+function addPage(name){
+  name=name.trim();
+  if(!name){toast('Type a page name first');return}
+  const ps=findPages();if(!ps.length)return;
+  const tpl=(sel&&ps.find(p=>p.unit.contains(sel)))||ps[0];
+  let key=name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'page';
+  if(doc.getElementById(key))key+='-'+(Date.now()%1000);
+  pushUndo();
+  const fix=n=>{[...n.attributes].forEach(a=>{if(a.name!=='class'&&a.name!=='style')n.setAttribute(a.name,a.value.split(tpl.key).join(key))});n.classList.remove('active','current','selected');n.removeAttribute('data-ed-sel')};
+  const u=tpl.unit.cloneNode(true);
+  [u,...u.querySelectorAll('*')].forEach(fix);
+  const w=doc.createTreeWalker(u,4),ts=[];let tn;
+  while((tn=w.nextNode()))if(tn.nodeValue.trim())ts.push(tn);
+  ts.forEach((t,i)=>{t.nodeValue=i?'':name});
+  tpl.unit.after(u);
+  const pg=tpl.target.cloneNode(false);
+  fix(pg);pg.id=key;
+  pg.innerHTML='<h1>'+esc(name)+'</h1><p>New page. Click here to edit.</p>';
+  tpl.target.after(pg);
+  commit();panel();
+  toast('Added “'+name+'”. Press Play, open it, then Edit this page.');
+}
+function rmPage(i){
+  const p=findPages()[i];if(!p)return;
+  pushUndo();p.unit.remove();p.target.remove();sel=null;commit();panel();
+  toast('Removed “'+p.name+'”');
+}
+const SYS=['Arial','Georgia','Verdana','Courier New','Comic Sans MS','Impact'];
+function fontNames(){
+  const n=[];
+  doc.querySelectorAll('style#ed-fonts').forEach(s=>{(s.textContent.match(/font-family:"[^"]+"/g)||[]).forEach(m=>n.push(m.slice(13,-1)))});
+  doc.querySelectorAll('link[data-ed-gf]').forEach(l=>n.push(l.getAttribute('data-ed-gf')));
+  return n;
+}
+function fontOpts(){return '<option value="">Choose a font…</option>'+fontNames().concat(SYS).map(n=>'<option>'+esc(n)+'</option>').join('')}
+function key(e){
+  if(mode==='edit'&&doc&&(e.ctrlKey||e.metaKey)&&!/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)){
+    if(e.key==='c'&&sel){e.preventDefault();copy();return}
+    if(e.key==='v'){e.preventDefault();paste();return}
+  }
+  if(!sel||mode!=='edit'||/INPUT|TEXTAREA|SELECT/.test(e.target.tagName))return;
+  const step=e.shiftKey?10:1,d={ArrowLeft:[-step,0],ArrowRight:[step,0],ArrowUp:[0,-step],ArrowDown:[0,step]}[e.key];
+  if(d){
+    e.preventDefault();
+    if(Date.now()-lastKey>600)pushUndo();lastKey=Date.now();
+    const [x,y]=getT(sel);setT(sel,x+d[0],y+d[1]);commit();panel();
+  }else if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();del()}
+}
+function del(){if(!sel)return;pushUndo();sel.remove();sel=null;commit();panel()}
+function dup(){
+  if(!sel)return;pushUndo();
+  const c=sel.cloneNode(true);c.removeAttribute('data-ed-sel');
+  sel.after(c);commit();select(c);
+}
+const label=el=>{const c=el.getAttribute('class');return el.tagName.toLowerCase()+(el.id?'#'+el.id:'')+(c?'.'+c.trim().split(/\s+/)[0]:'')};
+
+function panel(){
+  const p=$('#inspector');
+  if(!html){p.innerHTML='<p class="hint">Open an HTML file to start editing.</p>';return}
+  if(mode==='play'){p.innerHTML='<p class="hint">Playing: the page’s scripts are running. Click through to the page you want to change, then press “Edit this page”.</p>';return}
+  if(!doc){p.innerHTML='<p class="hint">Loading…</p>';return}
+  let h='';
+  if(!sel){h+='<p class="hint">Click anything on the page to select it, then drag it or use the fields here.</p>'}
+  else{
+    const [x,y]=getT(sel),r=sel.getBoundingClientRect(),img=sel.tagName==='IMG';
+    h+='<h2>'+esc(label(sel))+'</h2>';
+    if(!sel.children.length)h+='<label>Words<textarea id="f-text" rows="3"></textarea></label>';
+    h+='<div class="row"><label>Left / right<input id="f-x" type="number" value="'+x+'"></label><label>Up / down<input id="f-y" type="number" value="'+y+'"></label></div>';
+    h+='<div class="row"><label>Width<input id="f-w" type="number" value="'+Math.round(r.width)+'"></label><label>Height<input id="f-h" type="number" value="'+Math.round(r.height)+'"></label></div>';
+    h+='<div class="row end"><label>Rotate (°)<input id="f-r" type="number" value="'+rot(sel)+'"></label><button class="btn" id="b-rl" title="Rotate left 15°">↺</button><button class="btn" id="b-rr" title="Rotate right 15°">↻</button></div>';
+    h+='<label>Go to page<select id="f-pg">'+pageOpts()+'</select></label>';
+    h+='<label>Links to<input id="f-link" type="text" placeholder="https://… or #page"></label>';
+    h+='<button class="btn" id="b-img">'+(img?'Swap image…':'Set background image…')+'</button>';
+    h+='<div class="row"><button class="btn" id="b-dup">Duplicate</button><button class="btn" id="b-cp">Copy</button><button class="btn" id="b-del">Delete</button></div>';
+  }
+  h+='<h2>Add to page</h2><div class="row"><button class="btn" id="b-btn">Add a button</button><button class="btn" id="b-link">Add a link</button><button class="btn" id="b-paste">Paste</button></div><label>Embed a video or page<input id="f-embed" type="text" placeholder="Paste a URL"></label><button class="btn" id="b-emb">Add embed</button>';
+  h+='<h2>Pages</h2>'+pagesUI();
+  h+='<h2>Fonts</h2><button class="btn" id="b-font">Add a font file…</button><div class="row end"><label>Google Font<input id="f-gf" type="text" placeholder="e.g. Pacifico"></label><button class="btn" id="b-gf">Add</button></div>'+(sel?'<label>Font for this item<select id="f-font">'+fontOpts()+'</select></label><button class="btn" id="b-fall">Use it on the whole page</button>':'');
+  h+='<h2>Tab icon</h2><button class="btn" id="b-fav">Change tab icon…</button>';
+  p.innerHTML=h;
+  $('#b-fav').onclick=()=>pick(url=>{
+    pushUndo();
+    let l=doc.querySelector('link[rel~="icon"]');
+    if(!l){l=doc.createElement('link');l.rel='icon';doc.head.appendChild(l)}
+    l.href=url;commit();toast('Tab icon changed');
+  });
+  const put=el=>{pushUndo();if(sel&&sel!==doc.body)sel.after(el);else doc.body.appendChild(el);commit();select(el)};
+  $('#b-link').onclick=()=>{const a=doc.createElement('a');a.href='https://example.com';a.textContent='New link';put(a)};
+  $('#b-emb').onclick=()=>{
+    let u=$('#f-embed').value.trim();
+    if(!u){toast('Paste a URL first');return}
+    const m=u.match(/(?:youtu\.be\/|youtube\.com\/watch\?v=)([\w-]{6,})/);
+    if(m)u='https://www.youtube.com/embed/'+m[1];
+    const f=doc.createElement('iframe');
+    f.src=u;f.width=480;f.height=270;f.style.border='0';f.setAttribute('allowfullscreen','');
+    put(f);
+  };
+  p.querySelectorAll('[data-rm]').forEach(b=>{b.onclick=()=>rmPage(+b.dataset.rm)});
+  const np=$('#b-np');if(np)np.onclick=()=>addPage($('#f-np').value);
+  $('#b-btn').onclick=()=>{const a=doc.createElement('a');a.href='#';a.textContent='New button';a.style.cssText='display:inline-block;padding:10px 18px;border-radius:10px;background:#5b4bff;color:#fff;text-decoration:none;font:inherit';put(a)};
+  $('#b-paste').onclick=paste;
+  $('#b-font').onclick=()=>{
+    const i=$('#fontIn');i.value='';
+    i.onchange=()=>{const f=i.files[0];if(!f)return;readURL(f).then(url=>{
+      const name=f.name.replace(/\.[^.]+$/,'').replace(/[^\w ]+/g,' ').trim()||'My font';
+      pushUndo();
+      let s=doc.getElementById('ed-fonts');
+      if(!s){s=doc.createElement('style');s.id='ed-fonts';doc.head.appendChild(s)}
+      s.textContent+='@font-face{font-family:"'+name+'";src:url('+url+');}\n';
+      commit();panel();toast('Font “'+name+'” added');
+    })};
+    i.click();
+  };
+  $('#b-gf').onclick=()=>{
+    const n=$('#f-gf').value.trim();if(!n)return;
+    pushUndo();
+    const l=doc.createElement('link');l.rel='stylesheet';l.setAttribute('data-ed-gf',n);
+    l.href='https://fonts.googleapis.com/css2?family='+encodeURIComponent(n).replace(/%20/g,'+')+'&display=swap';
+    doc.head.appendChild(l);commit();panel();
+    toast('Added “'+n+'”. It may not preview here but works in your download.');
+  };
+  if(!sel)return;
+  const num=(id,fn)=>{const f=$(id);f.onfocus=pushUndo;f.oninput=()=>{fn(+f.value||0);commit()}};
+  num('#f-x',v=>setT(sel,v,getT(sel)[1]));
+  num('#f-y',v=>setT(sel,getT(sel)[0],v));
+  num('#f-w',v=>{sel.style.width=v+'px'});
+  num('#f-h',v=>{sel.style.height=v+'px'});
+  const t=$('#f-text');
+  if(t){t.value=sel.textContent;t.onfocus=pushUndo;t.oninput=()=>{sel.textContent=t.value;commit()}}
+  $('#b-img').onclick=()=>pick(url=>{
+    pushUndo();
+    if(sel.tagName==='IMG'){sel.src=url;sel.removeAttribute('srcset')}
+    else{sel.style.backgroundImage='url("'+url+'")';sel.style.backgroundSize='cover'}
+    commit();
+  });
+  $('#b-dup').onclick=dup;$('#b-del').onclick=del;
+  const L=$('#f-link'),anc=()=>sel.tagName==='A'?sel:sel.closest('a');
+  L.value=(anc()&&anc().getAttribute('href'))||'';
+  L.onfocus=pushUndo;
+  L.onchange=()=>{
+    const v=L.value.trim(),a=anc();
+    if(!v){if(a){a.removeAttribute('href');a.removeAttribute('target')}commit();return}
+    let t=a;
+    if(!t){t=doc.createElement('a');sel.replaceWith(t);t.appendChild(sel)}
+    t.setAttribute('href',v);
+    if(/^https?:/i.test(v))t.setAttribute('target','_blank');else t.removeAttribute('target');
+    commit();
+  };
+  const ensure=()=>{let t=anc();if(!t){t=doc.createElement('a');sel.replaceWith(t);t.appendChild(sel)}return t};
+  $('#f-pg').onchange=e=>{
+    const pg=findPages()[e.target.value];if(!pg)return;
+    pushUndo();const t=ensure();
+    ['href','onclick','data-page','data-tab','data-target'].forEach(a=>{const v=pg.nav.getAttribute(a);if(v==null)t.removeAttribute(a);else t.setAttribute(a,v)});
+    t.removeAttribute('target');commit();L.value=t.getAttribute('href')||'';
+  };
+  const R=$('#f-r'),setR=v=>{sel.style.rotate=v?v+'deg':'';R.value=v;commit()};
+  R.onfocus=pushUndo;
+  R.oninput=()=>{const v=+R.value||0;sel.style.rotate=v?v+'deg':'';commit()};
+  $('#b-rl').onclick=()=>{pushUndo();setR(rot(sel)-15)};
+  $('#b-rr').onclick=()=>{pushUndo();setR(rot(sel)+15)};
+  $('#b-cp').onclick=copy;
+  const F=$('#f-font');
+  F.onchange=()=>{if(!F.value)return;pushUndo();sel.style.fontFamily='"'+F.value+'"';commit()};
+  $('#b-fall').onclick=()=>{if(!F.value){toast('Choose a font first');return}pushUndo();doc.body.style.fontFamily='"'+F.value+'"';commit()};
+}
+
+function syncMode(){
+  $('#snap').hidden=mode!=='play';
+  $('#m-edit').setAttribute('aria-pressed',mode==='edit');
+  $('#m-play').setAttribute('aria-pressed',mode==='play');
+}
+function setMode(m){if(!html||m===mode)return;mode=m;syncMode();render()}
+function openFile(f){
+  if(!f)return;
+  const r=new FileReader();r.onload=()=>loadHTML(r.result,f.name);r.readAsText(f);
+}
+function dropH(e){
+  e.preventDefault();
+  const f=e.dataTransfer&&e.dataTransfer.files[0];
+  if(f&&/\.html?$/i.test(f.name))openFile(f);else if(f)toast('Drop an .html file');
+}
+
+$('#open').onclick=$('#open2').onclick=()=>{$('#fileIn').value='';$('#fileIn').click()};
+$('#fileIn').onchange=e=>openFile(e.target.files[0]);
+$('#sample').onclick=$('#sample2').onclick=()=>loadHTML(SAMPLE,'sample.html');
+function setFS(on){
+  const st=$('.stage');
+  if(on===st.classList.contains('fs'))return;
+  st.classList.toggle('fs',on);
+  document.body.style.overflow=on?'hidden':'';
+  if(on){try{const r=st.requestFullscreen&&st.requestFullscreen();if(r&&r.catch)r.catch(()=>{})}catch(e){}}
+  else if(document.fullscreenElement){try{document.exitFullscreen()}catch(e){}}
+  $('#fs').textContent=on?'Exit full screen':'Full screen';
+}
+$('#fs').onclick=()=>setFS(!$('.stage').classList.contains('fs'));
+$('#fsExit').onclick=()=>setFS(false);
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement)setFS(false)});
+window.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('.stage').classList.contains('fs'))setFS(false)});
+$('#undoB').onclick=()=>{if(mode!=='edit'||!undo.length){toast('Nothing to undo');return}html=undo.pop();render()};
+$('#m-edit').onclick=()=>setMode('edit');
+$('#m-play').onclick=()=>setMode('play');
+$('#snap').onclick=()=>{if(mode==='play'&&frame.contentWindow)frame.contentWindow.postMessage('ed-snap','*')};
+window.addEventListener('message',e=>{
+  if(e.source!==frame.contentWindow||!e.data||!e.data.edSnap)return;
+  undo.push(html);html=e.data.edSnap;mode='edit';syncMode();render();toast('Now editing this page');
+});
+$('#dl').onclick=()=>{
+  if(!html){toast('Open a page first');return}
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([html],{type:'text/html'}));
+  a.download=fileName.replace(/(\.html?)?$/i,'-edited.html');
+  document.body.appendChild(a);a.click();a.remove();
+  toast('Downloaded');
+};
+window.addEventListener('dragover',e=>e.preventDefault());
+window.addEventListener('drop',dropH);
+window.addEventListener('keydown',key);
+panel();
+</script>
+</body>
+</html>
